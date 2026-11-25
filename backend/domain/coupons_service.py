@@ -13,7 +13,7 @@ def record_coupon(conn, user, data):
     need(jig['calibrated'], '弯模量具尚未确认')
     need(350 <= data.heat <= 650 and 1.5 <= data.thick <= 10, '超出试制保温或片厚范围')
     need(0 <= data.measured <= jig['max_throw'] and 0 < data.target <= jig['max_throw'], '试片超过弯模行程')
-    return insert(conn, coupons, **data.model_dump(), locked=False)
+    return insert(conn, coupons, **data.model_dump(), locked=False, source='常规')
 
 
 def witness(conn, user, data):

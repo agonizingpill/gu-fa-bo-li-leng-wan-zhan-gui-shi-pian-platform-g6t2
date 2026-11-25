@@ -23,5 +23,8 @@ def sign_profile(conn, user, data):
     current = get(conn, coupons, target['code'])
     need(current == target, '试片与拟合快照不相容')
     need(metric['prediction'] > 0 and metric['mae'] < 5, '曲线超过台面验证误差预算')
+    curve = {'terms': metric['terms'], 'held_out': metric['held_out'],
+             'features': metric['features'], 'means': metric['means'], 'scales': metric['scales'],
+             'coef': metric['coef'], 'intercept': metric['intercept'], 'bounds': metric['bounds']}
     return insert(conn, profiles, code=data.code, coupon=target['code'], prediction=metric['prediction'],
-        mae=metric['mae'], curve={'terms':metric['terms'],'held_out':metric['held_out']}, token=data.token)
+        mae=metric['mae'], curve=curve, token=data.token)

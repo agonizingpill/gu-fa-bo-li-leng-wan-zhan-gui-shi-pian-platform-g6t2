@@ -1,7 +1,61 @@
+from domain import curves
 from domain.jigs_model import jigs
 from domain.coupons_model import coupons
 from domain.profiles_model import profiles
 from domain.work_orders_model import work_orders
+from domain.supplements_model import supplement_candidates
+
+# 两条演示签注曲线的可复算参数（由 domain.curves.fit_bundle 在演示试片上确定性拟合）。
+# 较新的 PRO-32 仅用前 16 张、强收缩；较旧的 PRO-31 用全部 20 张、弱正则，两者在包络内存在分歧。
+BUNDLE_FULL = {
+    "features": ["heat", "thick", "target"],
+    "means": [495.5, 3.5, 11.0, 248213.5, 1745.5, 5468.5, 13.5, 38.5, 123.0],
+    "scales": [51.896532, 1.118034, 1.414214, 51485.424142, 618.25096, 1009.173449,
+               7.889867, 13.35103, 31.157664],
+    "coef": [0.503878, 0.250258, 0.504592, 0.406401, -0.122061, 0.491144,
+             0.121488, 0.466966, 0.308888],
+    "intercept": 8.0305,
+    "terms": ["温度", "片厚", "目标弯度", "温度 温度", "温度 片厚", "温度 目标弯度",
+              "片厚 片厚", "片厚 目标弯度", "目标弯度 目标弯度"],
+    "bounds": {"heat": {"min": 410, "max": 581}, "thick": {"min": 2, "max": 5},
+               "target": {"min": 9, "max": 13}}}
+BUNDLE_EARLY = {
+    "features": ["heat", "thick", "target"],
+    "means": [477.5, 3.5, 10.875, 229727.5, 1682.5, 5201.25, 13.5, 37.75, 120.375],
+    "scales": [41.48795, 1.118034, 1.452369, 39650.539823, 588.04953, 880.457516,
+               7.889867, 12.224463, 31.835269],
+    "coef": [0.160857, 0.074455, 0.194295, 0.159056, 0.100234, 0.233785,
+             0.073366, 0.145865, 0.193751],
+    "intercept": 7.494375,
+    "terms": ["温度", "片厚", "目标弯度", "温度 温度", "温度 片厚", "温度 目标弯度",
+              "片厚 片厚", "片厚 目标弯度", "目标弯度 目标弯度"],
+    "bounds": {"heat": {"min": 410, "max": 545}, "thick": {"min": 2, "max": 5},
+               "target": {"min": 9, "max": 13}}}
+
+# 补测候选工况：名次由两条曲线的复算分歧自高到低动态确定。
+_CANDIDATE_CONDITIONS = [
+    ('C-01', 470, 2, 9),
+    ('C-02', 530, 5, 12),
+    ('C-03', 460, 4, 13),
+]
+
+
+def _candidate_rows():
+    built = []
+    for code, heat, thick, target in _CANDIDATE_CONDITIONS:
+        point = {'heat': heat, 'thick': thick, 'target': target}
+        pred_newer = curves.predict(BUNDLE_EARLY, point)   # PRO-32 为最新曲线
+        pred_older = curves.predict(BUNDLE_FULL, point)    # PRO-31 为次新曲线
+        built.append({'code': code, 'jig': 'CL-44', 'heat': heat, 'thick': thick,
+                      'target': target, 'profile_a': 'PRO-32', 'profile_b': 'PRO-31',
+                      'prediction_a': pred_newer, 'prediction_b': pred_older,
+                      'divergence': round(abs(pred_newer - pred_older), 3),
+                      'status': '待领片', 'claimed_by': None, 'coupon': None})
+    built.sort(key=lambda row: (-row['divergence'], row['code']))
+    for rank, row in enumerate(built, start=1):
+        row['rank'] = rank
+    return built
+
 
 FIXTURES = [
     (jigs, [{'code': 'CL-44', 'spread': 180, 'max_throw': 32, 'calibrated': True},
@@ -152,11 +206,24 @@ FIXTURES = [
   'prediction': 10.73,
   'mae': 1.13,
   'curve': {'二次模型': '温度 × 片厚', '留出': '按温区'},
-  'token': 'initial-profile'}]),
+  'token': 'initial-profile'},
+ {'code': 'PRO-31',
+  'coupon': 'GP-19',
+  'prediction': curves.predict(BUNDLE_FULL, {'heat': 581, 'thick': 5, 'target': 13}),
+  'mae': 0.022,
+  'curve': BUNDLE_FULL,
+  'token': 'seed-bundle-full'},
+ {'code': 'PRO-32',
+  'coupon': 'GP-15',
+  'prediction': curves.predict(BUNDLE_EARLY, {'heat': 545, 'thick': 5, 'target': 9}),
+  'mae': 0.725,
+  'curve': BUNDLE_EARLY,
+  'token': 'seed-bundle-early'}]),
     (work_orders, [{'code': 'JOB-21',
   'profile': 'PRO-11',
   'jig': 'CL-44',
   'slot': '11-24 09:30',
   'quantity': 2,
   'state': '待打样'}]),
+    (supplement_candidates, _candidate_rows()),
 ]

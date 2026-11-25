@@ -25,17 +25,18 @@ function parse(form, fields) {
 export function actionForm(action, refresh) {
   const notice = status('');
   const button = el('button', {type:'submit'}, action.label);
+  const fields = action.fields || [];
   const form = el('form', {class:'action', id:action.name},
     el('h3',{},action.label), el('p',{},action.help),
-    el('div',{class:'fields'},action.fields.map(field => el('label',{},
-      el('span',{},field.label), input(field)))),
+    fields.length ? el('div',{class:'fields'},fields.map(field => el('label',{},
+      el('span',{},field.label), input(field)))) : null,
     button, notice);
   form.addEventListener('submit',async event => {
     event.preventDefault();
     button.disabled = true;
     notice.className = 'status';
     try {
-      const data = await request(action.path, parse(form, action.fields));
+      const data = await request(action.path, fields.length ? parse(form, fields) : {});
       if (data.token && data.status === 'queued') {
         evidence.save(data.token);
         const result = await awaitCompute(data.token, current => {

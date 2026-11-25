@@ -35,6 +35,14 @@
     {
       "name": "locked",
       "label": "已确认"
+    },
+    {
+      "name": "source",
+      "label": "来源"
+    },
+    {
+      "name": "claim_snapshot",
+      "label": "领片时两条预测"
     }
   ],
   "layout": "stack",

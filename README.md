@@ -10,6 +10,7 @@
 - 温区试片 `coupons`，字段为 `jig`（弯模）、`heat`（保温温度 °C）、`thick`（片厚 mm）、`target`（目标弯度 mm）、`measured`（冷却弯度 mm）、`locked`（已确认）。模型约束位于 `backend/domain/coupons_model.py`，规则位于 `coupons_service.py`。
 - 预测曲线签注 `profiles`，字段为 `coupon`（基准试片）、`prediction`（拟合弯度 mm）、`mae`（留出 MAE mm）、`curve`（改善说明）、`token`（拟合编号）。模型约束位于 `backend/domain/profiles_model.py`，规则位于 `profiles_service.py`。
 - 试制工位委托 `work_orders`，字段为 `profile`（依据）、`jig`（工位弯模）、`slot`（机位时段）、`quantity`（试片数）、`state`（状态）。模型约束位于 `backend/domain/work_orders_model.py`，规则位于 `work_orders_service.py`。
+- 补测候选与领片 `supplement_candidates`，字段为 `jig`（弯模）、`heat/thick/target`（候选工况）、`profile_a/profile_b`（最新两条签注曲线）、`prediction_a/prediction_b`（两条复算预测）、`divergence`（曲线分歧）、`rank`（分歧名次）、`status`（待领片/已领片/已登记/已见证）、`claimed_by`（领取人）、`coupon`（补测试片）。模型约束位于 `backend/domain/supplements_model.py`，规则位于 `supplements_service.py`。补测试片写在 `coupons` 中，以 `source='补测领片'` 区分，`claim_snapshot` 留档领片时的两条曲线预测；冷却读数允许先空、登记一次后见证锁定。
 
 团队为模拟的6 人打样组，负责展柜旧式玻璃的冷弯样件。
 
@@ -55,8 +56,11 @@ Compose 运行 Nginx、Python FastAPI、独立 Redis 消费进程、SQL 数据�
 | 温区试片 | `/coupons` /coupons/record-coupon，/coupons/witness | `frontend/src/pages/coupons.js` |
 | 预测曲线签注 | `/profiles` /profiles/fit-curve，/profiles/sign-profile | `frontend/src/pages/profiles.js` |
 | 试制工位委托 | `/work_orders` /work_orders/book-jig，/work_orders/complete | `frontend/src/pages/work_orders.js` |
+| 补测领片 | `/supplements` /supplements/register-candidate，/supplements/claim，/supplements/record-reading，/supplements/witness | `frontend/src/pages/supplements.js` |
 
 SQL 实体与约束在 `backend/domain` 下维护。前端使用原生 ES modules。核心算子为 PolynomialFeatures + Lasso。算法按温度排序每四条留出一条；训练拟合二次多项式和标准化。报告使用 mm 和可复现特征系数。
+
+曲线分歧补测只取最新两条可复算签注曲线（`profiles.id` 自增序号倒序）。候选工况（炉温、片厚、目标弯度）必须同时落在两条曲线训练样本的特征包络内才参与排序，按两条复算预测之差的绝对值自高到低编号。领片在 Postgres 上以 `FOR UPDATE` 行锁配合“仅待领片可更新”的条件 UPDATE 串行化，两人同时提交各拿不同工况，同一人重试返回其手上尚未见证的同一片。签注曲线在 `curve` 中保存标准化参数、九项二次特征系数与训练范围，`backend/domain/curves.py` 为纯标准库复算侧，与 worker 的 sklearn 管线导出参数一致。
 
 数据为模拟试制记录。工单留在本地数据库供核查。
 
